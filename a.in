@@ -1,0 +1,25 @@
+ccd=cd
+blank=$( pwd)
+hi= hello my  old nice friend '\r''\n' dsadas
+t1: x y
+ $(ccd) test/tt1
+ rm -rf twfdev1
+ mkdir twfdev1
+ echo $(hi)
+x: z
+ echo xxx_$(blank)$(blank)xxx
+y: z r
+ echo yyy
+z: r# r r r r1 r r r r2 r
+ $(ccd) test
+ ls -a
+ (echo zzz)
+r:
+ echo $(blank)/tt1 | cd
+ echo '2'
+r1:
+ echo 'yes' >> null
+r2:
+ echo '2yes' >> null
+r#:
+ echo '1yes' >> null
