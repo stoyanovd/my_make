@@ -1,25 +1,20 @@
 ccd=cd
-blank=$( pwd)
-hi= hello my  old nice friend '\r''\n' dsadas
+blank=
+hi= hello my  old nice friend '\r''\n' hello
 t1: x y
- $(ccd) test/tt1
- rm -rf twfdev1
- mkdir twfdev1
+ $(ccd) test_dir
+ rm -rf inner_dir
+ mkdir inner_dir
  echo $(hi)
 x: z
  echo xxx_$(blank)$(blank)xxx
 y: z r
  echo yyy
-z: r# r r r r1 r r r r2 r
- $(ccd) test
+z: r r r r1 r r r r2 r
+ $(ccd) test_dir
  ls -a
  (echo zzz)
 r:
- echo $(blank)/tt1 | cd
- echo '2'
+ echo 'r'
 r1:
- echo 'yes' >> null
 r2:
- echo '2yes' >> null
-r#:
- echo '1yes' >> null

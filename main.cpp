@@ -20,7 +20,6 @@ struct Target
     size_t index;
     string name;
     vector<size_t> dependencies;
-    vector<size_t> inverse_dependencies;
     vector<string *> actions;
     bool was_initialized;
 
@@ -30,6 +29,12 @@ struct Target
         targets.push_back(this);
         targets_names[name] = index;
         was_initialized = false;
+    }
+
+    ~Target()
+    {
+        for (size_t i = 0; i < actions.size(); i++)
+            delete actions[i];
     }
 };
 
@@ -48,10 +53,17 @@ bool hasError()
     return (error_description != "");
 }
 
+void cleanTargets()
+{
+    for (size_t i = 0; i < targets.size(); i++)
+        delete targets[i];
+}
+
 void tryExitWithError()
 {
     if (hasError())
     {
+        cleanTargets();
         if (error_line_number != -1)
             cout << "Error line: " << error_line_number << endl;
         cout << error_description << endl;
@@ -126,7 +138,6 @@ void addTarget(const string &s, int i)
         else
             dependency_target = getOrCreateTargetByName(s.substr(j, next_space - j));
         last_target->dependencies.push_back(dependency_target->index);
-        dependency_target->inverse_dependencies.push_back(last_target->index);
         if (next_space == -1)
             break;
         j = next_space;
@@ -228,8 +239,6 @@ void deleteMultipleEdges()
     {
         deleteRepeatsInVector(temp, already_seen, max_index, targets[i]->dependencies);
         targets[i]->dependencies = temp;
-        deleteRepeatsInVector(temp, already_seen, max_index, targets[i]->inverse_dependencies);
-        targets[i]->inverse_dependencies = temp;
     }
 }
 
@@ -240,7 +249,7 @@ void runActions(Target *target)
         setError("Target \"" + target->name + "\"hasn't got definition.", -1);
         return;
     }
-    cout << "Target \"" << target->name << "\" is executed." << endl;
+    cout << "Target \"" << target->name << "\" is executed:" << endl;
     if (target->actions.empty())
     {
         cout << "Finished empty target : \"" << target->name << "\". It hasn't got any actions." << endl;
@@ -317,6 +326,7 @@ int main(int argc, char *argv[])
     outerDFS(general_target, true);
     tryExitWithError();
 
+    cleanTargets();
     cout << "All work was finished." << endl;
 
     return 0;
