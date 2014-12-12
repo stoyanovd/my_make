@@ -110,17 +110,9 @@ Target *getOrCreateTargetByName(const string &name)
         return targets[targets_names[name]];
 }
 
-void addTarget(const string &s, int i)
+void addDependencies(const string &s)
 {
-    last_target = getOrCreateTargetByName(s.substr(0, s.find(':')));
-    if (last_target->was_initialized)
-    {
-        setError("target \"" + last_target->name + "\" has multiple definitions.", i);
-        return;
-    }
-    last_target->was_initialized = true;
-
-    for (size_t j = s.find(':') + 1; j >= 0 && j < s.size(); j++)
+    for (size_t j = 0; j >= 0 && j < s.size(); j++)
     {
         if (s[j] == ' ')
         {
@@ -140,6 +132,32 @@ void addTarget(const string &s, int i)
     }
 }
 
+void addTarget(const string &s, int i)
+{
+    last_target = getOrCreateTargetByName(s.substr(0, s.find(':')));
+    if (last_target->was_initialized)
+    {
+        setError("Target \"" + last_target->name + "\" has multiple definitions.", i);
+        return;
+    }
+    last_target->was_initialized = true;
+
+    addDependencies(s.substr(s.find(':') + 1));
+}
+
+void cleanExcessChars(string &s)
+{
+    string only_true_chars = "";
+
+    for (size_t j = 0; j < s.size(); j++)
+        if (s[j] >= ' ')
+            only_true_chars += s[j];
+        else if (s[j] == '\t')
+            only_true_chars += ' ';
+
+    s = only_true_chars;
+}
+
 void addVariable(string &s, int i)
 {
     size_t equal_sign_pos = s.find('=');
@@ -157,7 +175,7 @@ void readInput(const char *file_name)
     ifstream input_stream(file_name);
     if (!input_stream.is_open())
     {
-        setError("Input file is bad. File \"a.in\" is considered to be an input file.", -1);
+        setError("Input file is bad.", -1);
         return;
     }
     string s = "";
@@ -167,6 +185,7 @@ void readInput(const char *file_name)
         if (hasError())
             return;
         i++;
+        cleanExcessChars(s);
         if (s.find_first_not_of(' ') == -1)
             continue;
         if (s.size() > 0 && s[0] == ' ')
@@ -214,10 +233,10 @@ void printTargets()
     }
 }
 
-void deleteRepeatsInVector(vector<size_t> &ans, vector<bool> &already_seen, const vector<size_t> &origin)
+void deleteRepeatsInVector(vector<size_t> &ans, size_t max_index, const vector<size_t> &origin)
 {
     ans.clear();
-    already_seen.clear();
+    vector<bool> already_seen(max_index, 0);
     for (size_t j = 0; j < origin.size(); j++)
         if (!already_seen[origin[j]])
         {
@@ -230,10 +249,9 @@ void deleteMultipleEdges()
 {
     vector<size_t> temp;
     const size_t max_index = targets.size();
-    vector<bool> already_seen(max_index, 0);
     for (size_t i = 0; i < max_index; i++)
     {
-        deleteRepeatsInVector(temp, already_seen, targets[i]->dependencies);
+        deleteRepeatsInVector(temp, max_index, targets[i]->dependencies);
         targets[i]->dependencies = temp;
     }
 }
@@ -242,7 +260,7 @@ void runActions(Target *target)
 {
     if (!target->was_initialized)
     {
-        setError("Target \"" + target->name + "\"hasn't got definition.", -1);
+        setError("Target \"" + target->name + "\" hasn't got definition.", -1);
         return;
     }
     cout << "Target \"" << target->name << "\" is executed:" << endl;
@@ -263,33 +281,39 @@ void runActions(Target *target)
         setError("Error in executing target's action.", -1);
 }
 
-void innerDFS(Target *target, vector<char> &visited, bool wantRunActions)
-{
-    if (hasError())
-        return;
-    visited[target->index] = 1;
-    for (size_t i = 0; i < target->dependencies.size(); i++)
-    {
-        if (!wantRunActions && visited[target->dependencies[i]] == 1)
-        {
-            setError("There is a mutual dependency between \"" + target->name + "\" and \"" + targets[target->dependencies[i]]->name + "\"", -1);
-            return;
-        }
-        if (!visited[target->dependencies[i]])
-            innerDFS(targets[target->dependencies[i]], visited, wantRunActions);
-        if (hasError())
-            return;
-    }
-    visited[target->index] = 2;
-    if (wantRunActions)
-        runActions(target);
-}
-
-void outerDFS(Target *general_target, bool wantRunActions)
+void unbentDFS(Target *general_target, bool wantRunActions)
 {
     const size_t n = targets.size();
     vector<char> visited(n, 0);
-    innerDFS(general_target, visited, wantRunActions);
+    vector<pair<Target *, size_t> > recursive_stack;
+    recursive_stack.push_back(make_pair(general_target, 0));
+    while (!recursive_stack.empty())
+    {
+        if (hasError())
+            return;
+        Target *v = recursive_stack.back().first;
+        size_t i = recursive_stack.back().second;
+        recursive_stack.pop_back();
+        if (i >= v->dependencies.size())
+        {
+            visited[v->index] = 2;
+            if (wantRunActions)
+                runActions(v);
+            continue;
+        }
+        Target *to_add = targets[v->dependencies[i]];
+        recursive_stack.push_back(make_pair(v, i + 1));
+        if (visited[to_add->index] == 1)
+        {
+            setError("There is a mutual dependency between \"" + v->name + "\" and \"" + to_add->name + "\"", -1);
+            return;
+        }
+        if (visited[to_add->index] == 0)
+        {
+            visited[to_add->index] = 1;
+            recursive_stack.push_back(make_pair(to_add, 0));
+        }
+    }
 }
 
 Target *getGeneralTarget(const char *name)
@@ -315,10 +339,12 @@ int main(int argc, char *argv[])
     deleteMultipleEdges();
 
     Target *general_target = getGeneralTarget(argv[1]);
-    outerDFS(general_target, false);
+    //printTargets();                   //for debug using
+
+    unbentDFS(general_target, false);
     tryExitWithError();
 
-    outerDFS(general_target, true);
+    unbentDFS(general_target, true);
     tryExitWithError();
 
     cleanTargets();
