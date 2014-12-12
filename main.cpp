@@ -2,7 +2,7 @@
 #include <fstream>
 #include <map>
 #include <vector>
-#include <string.h>
+#include <string>
 #include <cstdlib>
 
 
@@ -20,7 +20,7 @@ struct Target
     size_t index;
     string name;
     vector<size_t> dependencies;
-    vector<string *> actions;
+    vector<string> actions;
     bool was_initialized;
 
     Target(string name) : name(name)
@@ -29,12 +29,6 @@ struct Target
         targets.push_back(this);
         targets_names[name] = index;
         was_initialized = false;
-    }
-
-    ~Target()
-    {
-        for (size_t i = 0; i < actions.size(); i++)
-            delete actions[i];
     }
 };
 
@@ -71,17 +65,8 @@ void tryExitWithError()
     }
 }
 
-void addAction(const string &s, int i)
+void resolveVariables(string &explicit_s, const string &s, int i)
 {
-    if (targets.empty())
-    {
-        setError("Action come before target.", i);
-        return;
-    }
-
-    // resolve variables
-
-    string *explicit_s = new string();
     for (size_t j = 0; j < s.size(); j++)
     {
         if (s.find('$', j) == j)
@@ -97,13 +82,24 @@ void addAction(const string &s, int i)
                 setError("Unknown variable  \"" + s.substr(j + 2, closing_bracket_pos - j - 2) + "\".", i);
                 return;
             }
-            (*explicit_s) += variables_map[s.substr(j + 2, closing_bracket_pos - j - 2)];
+            explicit_s += variables_map[s.substr(j + 2, closing_bracket_pos - j - 2)];
             j = closing_bracket_pos;
         }
         else
-            *explicit_s += s[j];
+            explicit_s += s[j];
     }
-    last_target->actions.push_back(explicit_s);
+}
+
+void addAction(const string &s, int i)
+{
+    if (targets.empty())
+    {
+        setError("Action come before target.", i);
+        return;
+    }
+
+    last_target->actions.push_back(string());
+    resolveVariables(last_target->actions[last_target->actions.size() - 1], s, i);
 }
 
 Target *getOrCreateTargetByName(const string &name)
@@ -155,11 +151,11 @@ void addVariable(string &s, int i)
     variables_map[s.substr(0, equal_sign_pos)] = s.substr(equal_sign_pos + 1, s.size() - equal_sign_pos - 1);
 }
 
-void readInput()
+void readInput(const char *file_name)
 {
     bool variables_finished = false;
-    ifstream input_stream("a.in");
-    if (!input_stream)
+    ifstream input_stream(file_name);
+    if (!input_stream.is_open())
     {
         setError("Input file is bad. File \"a.in\" is considered to be an input file.", -1);
         return;
@@ -218,10 +214,10 @@ void printTargets()
     }
 }
 
-void deleteRepeatsInVector(vector<size_t> &ans, char *already_seen, size_t max_index, const vector<size_t> &origin)
+void deleteRepeatsInVector(vector<size_t> &ans, vector<bool> &already_seen, const vector<size_t> &origin)
 {
     ans.clear();
-    memset(already_seen, 0, max_index);
+    already_seen.clear();
     for (size_t j = 0; j < origin.size(); j++)
         if (!already_seen[origin[j]])
         {
@@ -233,11 +229,11 @@ void deleteRepeatsInVector(vector<size_t> &ans, char *already_seen, size_t max_i
 void deleteMultipleEdges()
 {
     vector<size_t> temp;
-    size_t max_index = targets.size();
-    char already_seen[max_index];
+    const size_t max_index = targets.size();
+    vector<bool> already_seen(max_index, 0);
     for (size_t i = 0; i < max_index; i++)
     {
-        deleteRepeatsInVector(temp, already_seen, max_index, targets[i]->dependencies);
+        deleteRepeatsInVector(temp, already_seen, targets[i]->dependencies);
         targets[i]->dependencies = temp;
     }
 }
@@ -255,11 +251,11 @@ void runActions(Target *target)
         cout << "Finished empty target : \"" << target->name << "\". It hasn't got any actions." << endl;
         return;
     }
-    string actions = (*target->actions[0]);
+    string actions = target->actions[0];
     for (size_t i = 1; i < target->actions.size(); i++)
     {
         //cout << "action: " << i << "  " << target->actions[i]->c_str() << endl;           //useful debug info
-        actions += " && " + (*target->actions[i]);
+        actions += " && " + target->actions[i];
     }
     int return_code = system(actions.c_str());
     cout << "Finished target : \"" << target->name << "\" with return code " << return_code << endl;
@@ -267,7 +263,7 @@ void runActions(Target *target)
         setError("Error in executing target's action.", -1);
 }
 
-void innerDFS(Target *target, char *visited, bool wantRunActions)
+void innerDFS(Target *target, vector<char> &visited, bool wantRunActions)
 {
     if (hasError())
         return;
@@ -291,9 +287,8 @@ void innerDFS(Target *target, char *visited, bool wantRunActions)
 
 void outerDFS(Target *general_target, bool wantRunActions)
 {
-    size_t n = targets.size();
-    char visited[n];
-    memset(visited, 0, n);
+    const size_t n = targets.size();
+    vector<char> visited(n, 0);
     innerDFS(general_target, visited, wantRunActions);
 }
 
@@ -306,13 +301,13 @@ Target *getGeneralTarget(const char *name)
 
 int main(int argc, char *argv[])
 {
-    if (argc != 2)
+    if (argc != 3)
     {
-        setError("Usage: my_make main_target_name.\n File \"a.in\" is considered to be an input file.", -1);
+        setError("Usage:   my_make   [MAIN TARGET]  [FILE NAME]", -1);
         tryExitWithError();
     }
 
-    readInput();
+    readInput(argv[2]);
     tryExitWithError();
 
     //printTargets();                   //for debug using
