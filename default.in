@@ -1,0 +1,20 @@
+ccd=cd
+blank=
+hi= hello my  old nice friend '\r''\n' hello
+t1: x y
+ $(ccd) test_dir
+ rm -rf inner_dir
+ mkdir inner_dir
+ echo $(hi)
+x: z
+ echo xxx_$(blank)$(blank)xxx
+y: z r
+ echo yyy
+z: r r r r1 r r r r2 r
+ $(ccd) test_dir
+ ls -a
+ (echo zzz)
+r:
+ echo 'r'
+r1:
+r2:
